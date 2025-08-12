@@ -27,27 +27,34 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+
 #ifndef HOST_HAL_MOCK
 #include "stm32f7xx_hal_rcc.h"
 #include "stm32746g_discovery_ts.h"
 #include "stm32746g_discovery_lcd.h"
 #include "stm32f7xx_hal_tim.h"
 #include "arm_math.h"
-
 #include "SDR_Audio.h"
 #include "Process_DSP.h"
 #include "Codec_Gains.h"
 #include "button.h"
-
 #include "DS3231.h"
-
 #include "SiLabs.h"
-
 #include "options.h"
+#include "PskInterface.h"
 #endif
 
 #include "autoseq_engine.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 #include "constants.h"
+#ifdef __cplusplus
+}
+#endif
+
 #include "decode_ft8.h"
 #include "gen_ft8.h"
 #include "log_file.h"
@@ -68,6 +75,8 @@ bool clr_pressed = false;
 bool free_text = false;
 bool tx_pressed = false;
 
+static UART_HandleTypeDef s_UART1Handle = UART_HandleTypeDef();
+
 // Autoseq TX text buffer
 static char autoseq_txbuf[MAX_MSG_LEN];
 // Autoseq QSO states text
@@ -79,24 +88,28 @@ static bool worked_qsos_in_display = false;
 // Used for display RX and TX after returning from Tune
 static bool tune_pressed = false;
 
-
 #ifndef HOST_HAL_MOCK
 /* Private function prototypes -----------------------------------------------*/
 static void SystemClock_Config(void);
 static void Error_Handler(void);
 static void CPU_CACHE_Enable(void);
-static void HID_InitApplication(void);
+static void InitialiseDisplay(void);
+static bool Initialise_Serial();
 #endif
 
 // Helper function for updating TX region display
-void tx_display_update()
+static void tx_display_update()
 {
-	if (Tune_On || worked_qsos_in_display) {
+	if (Tune_On || worked_qsos_in_display)
+	{
 		return;
 	}
-	if (xmit_flag) {
+	if (xmit_flag)
+	{
 		display_txing_message(autoseq_txbuf);
-	} else {
+	}
+	else
+	{
 		display_queued_message(autoseq_txbuf);
 	}
 	autoseq_get_qso_states(autoseq_state_strs);
@@ -118,7 +131,8 @@ static void update_synchronization(void)
 		printf("slot state %d -> %d\n", slot_state, slot_state ^ 1);
 #endif
 		slot_state ^= 1;
-		if (was_txing) {
+		if (was_txing)
+		{
 			autoseq_tick();
 		}
 		was_txing = 0;
@@ -144,9 +158,11 @@ static void update_synchronization(void)
 		make_Real_Date();
 		// Log the ctx queue
 		autoseq_log_ctx_queue(autoseq_queue_strs);
-		for (int i = 0; i < MAX_QUEUE_SIZE; i++) {
+		for (int i = 0; i < MAX_QUEUE_SIZE; i++)
+		{
 			const char *cur_line = autoseq_queue_strs[i];
-			if (cur_line[0] == '\0') {
+			if (cur_line[0] == '\0')
+			{
 				break;
 			}
 			Write_RxTxLog_Data(cur_line);
@@ -168,8 +184,10 @@ int main(void)
 
 	HAL_Init();
 
-	/* Configure the System clock to have a frequency of 200 MHz */
+	/* Configure the System clock to have a frequency of 216 MHz */
 	SystemClock_Config();
+
+	EXT_I2C_Init();
 
 	start_audio_I2C();
 
@@ -179,11 +197,9 @@ int main(void)
 	Check_Board_Version();
 	DeInit_BoardVersionInput();
 
-	HID_InitApplication(); // really sets up LCD Display, leftover from example
-	HAL_Delay(10);
+	InitialiseDisplay();
+	Initialise_Serial();
 	BSP_TS_Init(BSP_LCD_GetXSize(), BSP_LCD_GetYSize());
-
-	initalize_constants();
 
 	init_DSP();
 
@@ -193,8 +209,6 @@ int main(void)
 
 	Options_Initialize();
 
-	EXT_I2C_Init();
-	HAL_Delay(10);
 	DS3231_init();
 	display_Real_Date(0, 240);
 
@@ -209,19 +223,20 @@ int main(void)
 	HAL_Delay(10);
 	receive_sequence();
 	HAL_Delay(10);
-	Set_Headphone_Gain(30);
+	Set_Headphone_Gain(94);
 	Init_Log_File();
 	FT8_Sync();
 	HAL_Delay(10);
 #else
-int main(int argc, char *argv[]) {
-	if (argc == 2) {
+int main(int argc, char *argv[])
+{
+	if (argc == 2)
+	{
 		test_data_file = argv[1];
 	}
 #endif
 
 	autoseq_init();
-
 
 	while (1)
 	{
@@ -263,7 +278,8 @@ int main(int argc, char *argv[]) {
 			display_RealTime(100, 240);
 
 			// falling edge detection - tune mode exited
-			if (!Tune_On && tune_pressed) {
+			if (!Tune_On && tune_pressed)
+			{
 				// Need to display RX and TX again
 				display_messages(new_decoded, master_decoded);
 				tx_display_update();
@@ -271,7 +287,6 @@ int main(int argc, char *argv[]) {
 			tune_pressed = Tune_On;
 
 			DSP_Flag = 0;
-
 		}
 
 		if (decode_flag && !xmit_flag)
@@ -279,7 +294,8 @@ int main(int argc, char *argv[]) {
 			master_decoded = ft8_decode();
 #ifdef HOST_HAL_MOCK
 			// Check if we should exit the main
-			if (master_decoded == -1) {
+			if (master_decoded == -1)
+			{
 				return 0;
 			}
 #endif
@@ -290,10 +306,11 @@ int main(int argc, char *argv[]) {
 			// Write all the decoded messages to RxTxLog
 			make_Real_Time();
 			make_Real_Date();
-			for (int i = 0; i < master_decoded; ++i) {
+			for (int i = 0; i < master_decoded; ++i)
+			{
 				char log_str[64];
 				snprintf(log_str, sizeof(log_str), "%c [%s %s][%s] %s %s %s %2i %d",
-				         was_txing ? 'O' : 'R',
+						 was_txing ? 'O' : 'R',
 						 log_rtc_date_string,
 						 log_rtc_time_string,
 						 sBand_Data[BandIndex].display,
@@ -304,13 +321,16 @@ int main(int argc, char *argv[]) {
 						 new_decoded[i].freq_hz);
 				Write_RxTxLog_Data(log_str);
 			}
-			if (!was_txing) {
+			if (!was_txing)
+			{
 				autoseq_on_decodes(new_decoded, master_decoded);
 				if (autoseq_get_next_tx(autoseq_txbuf))
 				{
 					queue_custom_text(autoseq_txbuf);
 					QSO_xmit = 1;
-				} else if (Beacon_On)  {
+				}
+				else if (Beacon_On)
+				{
 					autoseq_start_cq();
 					autoseq_get_next_tx(autoseq_txbuf);
 					queue_custom_text(autoseq_txbuf);
@@ -319,7 +339,7 @@ int main(int argc, char *argv[]) {
 				}
 				tx_display_update();
 			}
-			
+
 			decode_flag = 0;
 		} // end of servicing FT_Decode
 
@@ -328,7 +348,8 @@ int main(int argc, char *argv[]) {
 
 		Process_Touch();
 
-		if (clr_pressed) {
+		if (clr_pressed)
+		{
 			terminate_QSO();
 			QSO_xmit = 0;
 			was_txing = 0;
@@ -338,16 +359,19 @@ int main(int argc, char *argv[]) {
 			clr_pressed = false;
 		}
 
-		if (tx_pressed) {
+		if (tx_pressed)
+		{
 			worked_qsos_in_display = display_worked_qsos();
 			tx_pressed = false;
 			tx_display_update();
 		}
 
-		if (!Tune_On && FT8_Touch_Flag && FT_8_TouchIndex < master_decoded) {
+		if (!Tune_On && FT8_Touch_Flag && FT_8_TouchIndex < master_decoded)
+		{
 			process_selected_Station(master_decoded, FT_8_TouchIndex);
 			autoseq_on_touch(&new_decoded[FT_8_TouchIndex]);
-			if (autoseq_get_next_tx(autoseq_txbuf)) {
+			if (autoseq_get_next_tx(autoseq_txbuf))
+			{
 				queue_custom_text(autoseq_txbuf);
 				QSO_xmit = 1;
 			}
@@ -356,6 +380,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		update_synchronization();
+		updateTime();
 	}
 }
 
@@ -365,7 +390,7 @@ int main(int argc, char *argv[]) {
  * @param  None
  * @retval None
  */
-static void HID_InitApplication(void)
+static void InitialiseDisplay(void)
 {
 	/* Configure Key button */
 	BSP_PB_Init(BUTTON_TAMPER, BUTTON_MODE_GPIO);
@@ -417,7 +442,7 @@ void HAL_Delay(__IO uint32_t Delay)
  *            APB2 Prescaler                 = 2
  *            HSE Frequency(Hz)              = 25000000
  *            PLL_M                          = 25
- *            PLL_N                          = 400
+ *            PLL_N                          = 432
  *            PLL_P                          = 2
  *            PLLSAI_N                       = 384
  *            PLLSAI_P                       = 8
@@ -440,15 +465,16 @@ void SystemClock_Config(void)
 	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
 	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
 	RCC_OscInitStruct.PLL.PLLM = 25;
-	RCC_OscInitStruct.PLL.PLLN = 400;
+	RCC_OscInitStruct.PLL.PLLN = 432;
 	RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
 	RCC_OscInitStruct.PLL.PLLQ = 8;
+
 	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
 	{
 		Error_Handler();
 	}
 
-	/* Activate the OverDrive to reach the 200 Mhz Frequency */
+	/* Activate the OverDrive to reach the 216 Mhz Frequency */
 	if (HAL_PWREx_EnableOverDrive() != HAL_OK)
 	{
 		Error_Handler();
@@ -504,6 +530,52 @@ static void CPU_CACHE_Enable(void)
 	/* Enable D-Cache */
 	SCB_EnableDCache();
 }
+
+static bool Initialise_Serial()
+{
+	__USART1_CLK_ENABLE();
+	__I2C1_CLK_ENABLE();
+	__GPIOA_CLK_ENABLE();
+	__GPIOB_CLK_ENABLE();
+	__GPIOG_CLK_ENABLE();
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+
+	// Serial debug Port USART1 TX/RX : PA9/PB7
+	GPIO_InitStructure.Pin = GPIO_PIN_9; // TX
+	GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
+	GPIO_InitStructure.Alternate = GPIO_AF7_USART1;
+	GPIO_InitStructure.Speed = GPIO_SPEED_HIGH;
+	GPIO_InitStructure.Pull = GPIO_NOPULL;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+	GPIO_InitStructure.Pin = GPIO_PIN_7; // RX
+	GPIO_InitStructure.Mode = GPIO_MODE_AF_OD;
+	GPIO_InitStructure.Alternate = GPIO_AF7_USART3;
+	GPIO_InitStructure.Speed = GPIO_SPEED_HIGH;
+	GPIO_InitStructure.Pull = GPIO_NOPULL;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+	s_UART1Handle.Instance = USART1;
+	s_UART1Handle.Init.BaudRate = 115200;
+	s_UART1Handle.Init.WordLength = UART_WORDLENGTH_8B;
+	s_UART1Handle.Init.StopBits = UART_STOPBITS_1;
+	s_UART1Handle.Init.Parity = UART_PARITY_NONE;
+	s_UART1Handle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+	s_UART1Handle.Init.Mode = UART_MODE_TX_RX;
+
+	return (HAL_UART_Init(&s_UART1Handle) == HAL_OK);
+}
+
+void logger(const char *message, const char *file, int line)
+{
+	char buffer[256];
+	if (snprintf(buffer, sizeof(buffer), "%s:%d: %s\n", file, line, message) > 0)
+	{
+		HAL_UART_Transmit(&s_UART1Handle, (uint8_t *)buffer, strlen(buffer), HAL_MAX_DELAY);
+	}
+}
+
 #endif
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+/************************ Portions (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -1,1 +1,8 @@
 build
+.DS_Store
+Katy.map
+Katy.elf
+Katy.hex
+Katy.list
+.vscode
+Katy.bin

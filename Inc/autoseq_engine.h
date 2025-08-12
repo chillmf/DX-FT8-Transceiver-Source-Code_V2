@@ -7,6 +7,9 @@
 #include "qso_display.h"
 #include "main.h"
 
+// Configurable Knobs
+extern int max_tx_retries;
+
 void autoseq_init();
 
 void autoseq_start_cq(void);

@@ -16,40 +16,42 @@
 
 #include "autoseq_engine.h"
 #include "qso_display.h" // For adding worked qso entry
-#include "gen_ft8.h" // For accessing CQ_Mode_Index and saving Target_*
-#include "ADIF.h"    // For write_ADIF_Log()
+#include "gen_ft8.h"     // For accessing CQ_Mode_Index and saving Target_*
+#include "ADIF.h"        // For write_ADIF_Log()
 
 // HAL
 #ifdef HOST_HAL_MOCK
 #include "host_mocks.h"
 #else
-#include "button.h"  // For BandIndex
-#include "DS3231.h"  // For log_rtc_time_string
+#include "button.h" // For BandIndex
+#include "DS3231.h" // For log_rtc_time_string
 #endif
 
 extern int Beacon_On; // TODO get rid of manual extern
 extern int Skip_Tx1;  // TODO get rid of manual extern
 
-/***** Compile‑time knobs *****/
-#define MAX_TX_RETRY 5
+/***** Configurable knobs *****/
+int max_tx_retries;
 
 /* For DECENDING order. Returns −1 if (a) > (b), 0 if equal, +1 if (a) < (b) */
-#define CMP(a, b)   ( ((a) < (b)) - ((a) > (b)) )
+#define CMP(a, b) (((a) < (b)) - ((a) > (b)))
 
 /***** Identifiers for the six canonical FT8 messages *****/
-typedef enum {
+typedef enum
+{
     TX_UNDEF = 0,
-    TX1,   /*  <DXCALL> <MYCALL> <GRID>            */
-    TX2,   /*  <DXCALL> <MYCALL> ##                */
-    TX3,   /*  <DXCALL> <MYCALL> R##               */
-    TX4,   /*  <DXCALL> <MYCALL> RR73 (or RRR)     */
-    TX5,   /*  <DXCALL> <MYCALL> 73                */
-    TX6    /*  CQ <MYCALL> <GRID>                  */
+    TX1, /*  <DXCALL> <MYCALL> <GRID>            */
+    TX2, /*  <DXCALL> <MYCALL> ##                */
+    TX3, /*  <DXCALL> <MYCALL> R##               */
+    TX4, /*  <DXCALL> <MYCALL> RR73 (or RRR)     */
+    TX5, /*  <DXCALL> <MYCALL> 73                */
+    TX6  /*  CQ <MYCALL> <GRID>                  */
 } tx_msg_t;
 
 /***** High‑level auto‑sequencer states *****/
 // Order that compare() can rely on
-typedef enum {
+typedef enum
+{
     AS_CALLING = 0,
     AS_REPLYING,
     AS_REPORT,
@@ -60,35 +62,36 @@ typedef enum {
 } autoseq_state_t;
 
 /***** Control‑block *****/
-typedef struct {
+typedef struct
+{
     autoseq_state_t state;
-    tx_msg_t        next_tx;
-    tx_msg_t        rcvd_msg_type;
+    tx_msg_t next_tx;
+    tx_msg_t rcvd_msg_type;
 
     char dxcall[14];
     char dxgrid[7];
 
-    int  snr_tx;              /* SNR we report to DX (‑dB) */
-    int  snr_rx;              /* TODO: is this needed? SNR we received from DX (‑dB) */
-    int  retry_counter;
-    int  retry_limit;
-    bool logged;              /* true => QSO logged */
+    int snr_tx; /* SNR we report to DX (‑dB) */
+    int snr_rx; /* TODO: is this needed? SNR we received from DX (‑dB) */
+    int retry_counter;
+    int retry_limit;
+    bool logged; /* true => QSO logged */
 } ctx_t;
 // For logging ctx in RxTxLog
-static const char *queue_log_format = 
+static const char *queue_log_format =
     "Q s:%1ut:%1ur:%1u:%-13.13s:%-6.6s:%+3d:%+3d:%1u:%1u:%1u";
 
 static ctx_t ctx_queue[MAX_QUEUE_SIZE];
 static int queue_size = 0;
 
-/*************** Forward declarations ****************/ 
+/*************** Forward declarations ****************/
 static void set_state(ctx_t *ctx, autoseq_state_t s, tx_msg_t first_tx, int limit);
 static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN]);
 static void parse_rcvd_msg(ctx_t *ctx, const Decode *msg);
 static void on_decode(const Decode *msg);
 static int compare(const void *a, const void *b);
 static void pop();
-static ctx_t* append();
+static ctx_t *append();
 // Internal helper called by autoseq_on_touch() and on_decode()
 static bool generate_response(ctx_t *ctx, const Decode *msg, bool override);
 // Ensure the queue is sorted and IDLE entries are popped
@@ -102,16 +105,19 @@ static void write_worked_qso();
 
 void autoseq_init()
 {
-    if (queue_size > 0) {
+    if (queue_size > 0)
+    {
         pop();
     }
 }
 
 void autoseq_start_cq(void)
 {
-    if (queue_size > 0 && queue_size < MAX_QUEUE_SIZE) {
+    if (queue_size > 0 && queue_size < MAX_QUEUE_SIZE)
+    {
         // Check if CQ is already at the bottom
-        if (ctx_queue[queue_size - 1].state == AS_CALLING) {
+        if (ctx_queue[queue_size - 1].state == AS_CALLING)
+        {
             return;
         }
     }
@@ -125,14 +131,16 @@ void autoseq_start_cq(void)
 // TODO dedup
 void autoseq_on_touch(const Decode *msg)
 {
-    if (!msg) {
+    if (!msg)
+    {
         return;
     }
 
     // If queue is full, remove the last one
     // Note that with MAX_QUEUE_SIZE == 1, it replaces the current TX,
     // which effectively disables the smart scheduler.
-    if (queue_size == MAX_QUEUE_SIZE) {
+    if (queue_size == MAX_QUEUE_SIZE)
+    {
         --queue_size;
     }
 
@@ -146,18 +154,20 @@ void autoseq_on_touch(const Decode *msg)
     }
     // Treat it as calling CQ
     strncpy(ctx->dxcall, msg->call_from, sizeof(ctx->dxcall) - 1);
-    if (msg->sequence == Seq_Locator) {
+    if (msg->sequence == Seq_Locator)
+    {
         strncpy(ctx->dxgrid, msg->locator, sizeof(ctx->dxgrid) - 1);
     }
     ctx->snr_tx = msg->snr;
     set_state(ctx, Skip_Tx1 ? AS_REPORT : AS_REPLYING,
-                   Skip_Tx1 ? TX2 : TX1, MAX_TX_RETRY);
+              Skip_Tx1 ? TX2 : TX1, max_tx_retries);
     sort_and_clean();
 }
 
 void autoseq_on_decodes(const Decode *messages, int num_decoded)
 {
-    for (int i = 0; i < num_decoded; i++) {
+    for (int i = 0; i < num_decoded; i++)
+    {
         on_decode(&messages[i]);
     }
     sort_and_clean();
@@ -166,13 +176,15 @@ void autoseq_on_decodes(const Decode *messages, int num_decoded)
 /* === Provide the message we should transmit this slot (if any) === */
 bool autoseq_get_next_tx(char out_text[MAX_MSG_LEN])
 {
-    if (!out_text) {
+    if (!out_text)
+    {
         return false;
     }
 
     out_text[0] = '\0';
 
-    if (queue_size == 0) {
+    if (queue_size == 0)
+    {
         return false;
     }
 
@@ -184,7 +196,8 @@ bool autoseq_get_next_tx(char out_text[MAX_MSG_LEN])
 /* === Populate the strings for displaying the QSO states  === */
 void autoseq_get_qso_states(char lines[][MAX_LINE_LEN])
 {
-    if (!lines) {
+    if (!lines)
+    {
         return;
     }
 
@@ -226,43 +239,57 @@ void autoseq_get_qso_states(char lines[][MAX_LINE_LEN])
 /* === Slot timer / time‑out manager === */
 void autoseq_tick(void)
 {
-    if (queue_size == 0) {
+    if (queue_size == 0)
+    {
         return;
     }
     ctx_t *ctx = &ctx_queue[0];
-    switch (ctx->state) {
+    switch (ctx->state)
+    {
     case AS_REPLYING:
-        if (ctx->retry_counter < ctx->retry_limit) {
+        if (ctx->retry_counter < ctx->retry_limit)
+        {
             ctx->next_tx = TX1;
             ctx->retry_counter++;
-        } else {
+        }
+        else
+        {
             ctx->state = AS_IDLE;
             ctx->next_tx = TX_UNDEF;
         }
         break;
     case AS_REPORT:
-        if (ctx->retry_counter < ctx->retry_limit) {
+        if (ctx->retry_counter < ctx->retry_limit)
+        {
             ctx->next_tx = TX2;
             ctx->retry_counter++;
-        } else {
+        }
+        else
+        {
             ctx->state = AS_IDLE;
             ctx->next_tx = TX_UNDEF;
         }
         break;
     case AS_ROGER_REPORT:
-        if (ctx->retry_counter < ctx->retry_limit) {
+        if (ctx->retry_counter < ctx->retry_limit)
+        {
             ctx->next_tx = TX3;
             ctx->retry_counter++;
-        } else {
+        }
+        else
+        {
             ctx->state = AS_IDLE;
             ctx->next_tx = TX_UNDEF;
         }
         break;
     case AS_ROGERS:
-        if (ctx->retry_counter < ctx->retry_limit) {
+        if (ctx->retry_counter < ctx->retry_limit)
+        {
             ctx->next_tx = TX4;
             ctx->retry_counter++;
-        } else {
+        }
+        else
+        {
             ctx->state = AS_IDLE;
             ctx->next_tx = TX_UNDEF;
         }
@@ -276,7 +303,8 @@ void autoseq_tick(void)
         break;
     }
 
-    if (ctx->state == AS_IDLE) {
+    if (ctx->state == AS_IDLE)
+    {
         pop();
     }
 }
@@ -284,7 +312,8 @@ void autoseq_tick(void)
 /* === Populate the strings for logging the ctx queue === */
 void autoseq_log_ctx_queue(char lines[][53])
 {
-    if (!lines) {
+    if (!lines)
+    {
         return;
     }
 
@@ -298,17 +327,16 @@ void autoseq_log_ctx_queue(char lines[][53])
             continue;
         }
         snprintf(out_text, 53, queue_log_format,
-            ctx_queue[i].state,
-            ctx_queue[i].next_tx,
-            ctx_queue[i].rcvd_msg_type,
-            ctx_queue[i].dxcall,
-            ctx_queue[i].dxgrid,
-            ctx_queue[i].snr_tx,
-            ctx_queue[i].snr_rx,
-            ctx_queue[i].retry_counter,
-            ctx_queue[i].retry_limit,
-            ctx_queue[i].logged
-        );
+                 ctx_queue[i].state,
+                 ctx_queue[i].next_tx,
+                 ctx_queue[i].rcvd_msg_type,
+                 ctx_queue[i].dxcall,
+                 ctx_queue[i].dxgrid,
+                 ctx_queue[i].snr_tx,
+                 ctx_queue[i].snr_rx,
+                 ctx_queue[i].retry_counter,
+                 ctx_queue[i].retry_limit,
+                 ctx_queue[i].logged);
     }
 }
 
@@ -318,10 +346,10 @@ void autoseq_log_ctx_queue(char lines[][53])
 
 static void set_state(ctx_t *ctx, autoseq_state_t s, tx_msg_t first_tx, int limit)
 {
-    ctx->state        = s;
-    ctx->next_tx      = first_tx;
+    ctx->state = s;
+    ctx->next_tx = first_tx;
     ctx->retry_counter = 0;
-    ctx->retry_limit   = limit;
+    ctx->retry_limit = limit;
 }
 
 static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN])
@@ -339,9 +367,10 @@ static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN])
 
     const char *cq_str = "CQ";
 
-    switch (id) {
+    switch (id)
+    {
     case TX1:
-        snprintf(out, MAX_MSG_LEN, "%s %s %s", Target_Call, Station_Call, Locator);
+        snprintf(out, MAX_MSG_LEN, "%s %s %s", Target_Call, Station_Call, Station_Locator);
         break;
     case TX2:
         snprintf(out, MAX_MSG_LEN, "%s %s %+d", Target_Call, Station_Call, Target_RSL);
@@ -351,7 +380,8 @@ static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN])
         break;
     case TX4:
         snprintf(out, MAX_MSG_LEN, "%s %s RR73", Target_Call, Station_Call);
-        if (!ctx->logged) {
+        if (!ctx->logged)
+        {
             write_ADIF_Log();
             write_worked_qso();
             ctx->logged = true;
@@ -359,14 +389,16 @@ static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN])
         break;
     case TX5:
         snprintf(out, MAX_MSG_LEN, "%s %s 73", Target_Call, Station_Call);
-        if (!ctx->logged) {
+        if (!ctx->logged)
+        {
             write_ADIF_Log();
             write_worked_qso();
             ctx->logged = true;
         }
         break;
     case TX6:
-	    if (!free_text) {
+        if (!free_text)
+        {
             switch (CQ_Mode_Index)
             {
             case 1:
@@ -381,8 +413,10 @@ static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN])
             default:
                 break;
             }
-            snprintf(out, MAX_MSG_LEN, "%s %s %s", cq_str, Station_Call, Locator);
-        } else {
+            snprintf(out, MAX_MSG_LEN, "%s %s %s", cq_str, Station_Call, Station_Locator);
+        }
+        else
+        {
             switch (Free_Index)
             {
             case 0:
@@ -394,22 +428,27 @@ static void format_tx_text(tx_msg_t id, char out[MAX_MSG_LEN])
             default:
                 break;
             }
-        } 
+        }
         break;
     default:
         break;
     }
 }
 
-static void parse_rcvd_msg(ctx_t *ctx, const Decode *msg) {
+static void parse_rcvd_msg(ctx_t *ctx, const Decode *msg)
+{
     ctx->rcvd_msg_type = TX_UNDEF;
-    if (msg->sequence == Seq_Locator) {
+    if (msg->sequence == Seq_Locator)
+    {
         ctx->rcvd_msg_type = TX1;
         strncpy(ctx->dxgrid, msg->locator, sizeof(ctx->dxgrid) - 1);
-    } else {
-        if (strcmp(msg->locator, "73") == 0) {
+    }
+    else
+    {
+        if (strcmp(msg->locator, "73") == 0)
+        {
             ctx->rcvd_msg_type = TX5;
-        } 
+        }
         else if (strcmp(msg->locator, "RR73") == 0)
         {
             ctx->rcvd_msg_type = TX4;
@@ -422,7 +461,8 @@ static void parse_rcvd_msg(ctx_t *ctx, const Decode *msg) {
         {
             ctx->rcvd_msg_type = TX3;
         }
-        else {
+        else
+        {
             ctx->rcvd_msg_type = TX2;
         }
     }
@@ -439,7 +479,8 @@ void on_decode(const Decode *msg)
     }
 
     // Check if it matches an existing ctx
-    for (int i = 0; i < queue_size; ++i) {
+    for (int i = 0; i < queue_size; ++i)
+    {
         ctx_t *ctx = &ctx_queue[i];
         if (strncmp(msg->call_from, ctx->dxcall, sizeof(ctx->dxcall)) == 0)
         {
@@ -450,7 +491,8 @@ void on_decode(const Decode *msg)
 
     // No matching existing ctx found.
     // Check if need to enqueue a new ctx
-    if (queue_size == MAX_QUEUE_SIZE) {
+    if (queue_size == MAX_QUEUE_SIZE)
+    {
         return;
     }
 
@@ -463,19 +505,23 @@ static bool generate_response(ctx_t *ctx, const Decode *msg, bool override)
 {
     parse_rcvd_msg(ctx, msg);
 
-    if (!msg || ctx->rcvd_msg_type == TX_UNDEF) {
+    if (!msg || ctx->rcvd_msg_type == TX_UNDEF)
+    {
         return false;
     }
 
-    if (ctx->rcvd_msg_type == TX1 || ctx->rcvd_msg_type == TX2) {
+    if (ctx->rcvd_msg_type == TX1 || ctx->rcvd_msg_type == TX2)
+    {
         // Update the DX SNR
         ctx->snr_tx = msg->snr;
     }
 
-    if(override) {
+    if (override)
+    {
         strncpy(ctx->dxcall, msg->call_from, sizeof(ctx->dxcall) - 1);
         // Reset own internal state to macth rcve_msg_type
-        switch (ctx->rcvd_msg_type) {
+        switch (ctx->rcvd_msg_type)
+        {
         case TX1:
             set_state(ctx, AS_CALLING, TX_UNDEF, 0);
             break;
@@ -496,123 +542,126 @@ static bool generate_response(ctx_t *ctx, const Decode *msg, bool override)
         }
     }
 
-    if (ctx->rcvd_msg_type == TX2 || ctx->rcvd_msg_type == TX3) {
+    if (ctx->rcvd_msg_type == TX2 || ctx->rcvd_msg_type == TX3)
+    {
         ctx->snr_rx = msg->received_snr;
     }
 
-    switch (ctx->state) {
+    switch (ctx->state)
+    {
     /* ------------------------------------------------ CALLING (we sent CQ) */
     case AS_CALLING:
-        switch (ctx->rcvd_msg_type) {
-            case TX1:
-                set_state(ctx, AS_REPORT, TX2, MAX_TX_RETRY);
-                return true;
-            case TX2:
-                set_state(ctx, AS_ROGER_REPORT, TX3, MAX_TX_RETRY);
-                return true;
-            case TX3:
-                set_state(ctx, AS_ROGERS, TX4, MAX_TX_RETRY);
-                return true;
-            default:
-                return false;
+        switch (ctx->rcvd_msg_type)
+        {
+        case TX1:
+            set_state(ctx, AS_REPORT, TX2, max_tx_retries);
+            return true;
+        case TX2:
+            set_state(ctx, AS_ROGER_REPORT, TX3, max_tx_retries);
+            return true;
+        case TX3:
+            set_state(ctx, AS_ROGERS, TX4, max_tx_retries);
+            return true;
+        default:
+            return false;
         }
 
     /* ------------------------------------------------ REPLYING (we sent Tx1) */
     case AS_REPLYING:
-        switch (ctx->rcvd_msg_type) {
-            // Since we sent TX1, it doesn't make sense to respond to TX1
-            // case TX1:
-            //     set_state(ctx, AS_REPORT, TX2, MAX_TX_RETRY);
-            //     return true;
-            case TX2:
-                set_state(ctx, AS_ROGER_REPORT, TX3, MAX_TX_RETRY);
-                return true;
-            case TX3:
-                set_state(ctx, AS_ROGERS, TX4, MAX_TX_RETRY);
-                return true;
+        switch (ctx->rcvd_msg_type)
+        {
+        // Since we sent TX1, it doesn't make sense to respond to TX1
+        case TX1:
+            return false;
+        case TX2:
+            set_state(ctx, AS_ROGER_REPORT, TX3, max_tx_retries);
+            return true;
+        case TX3:
+            set_state(ctx, AS_ROGERS, TX4, max_tx_retries);
+            return true;
 
-            // QSO complete without signal report exchange
-            case TX4:
-            case TX5:
-                set_state(ctx, AS_SIGNOFF, TX5, 0);
-                return true;
-            default:
-                return false;
+        // QSO complete without signal report exchange
+        case TX4:
+        case TX5:
+            set_state(ctx, AS_SIGNOFF, TX5, 0);
+            return true;
+        default:
+            return false;
         }
 
     /* ------------------------------------------------ REPORT sent, waiting Roger */
     case AS_REPORT:
-        switch (ctx->rcvd_msg_type) {
-            // DX didn't copy our TX2 response, stay in the same state by returning false
-            // case TX1:
-            //     set_state(ctx, AS_REPORT, TX2, MAX_TX_RETRY);
-            //     return true;
-
-            // Since we sent TX2, it doesn't make sense to respond to TX2
-            // case TX2:
-            //     set_state(ctx, AS_ROGER_REPORT, TX3, MAX_TX_RETRY);
-            //     return true;
-
-            case TX3:
-                set_state(ctx, AS_ROGERS, TX4, MAX_TX_RETRY);
-                return true;
-            // QSO complete without signal report exchange
-            case TX4:
-            case TX5:
-                set_state(ctx, AS_SIGNOFF, TX5, 0);
-                return true;
-            default:
-                return false;
+        switch (ctx->rcvd_msg_type)
+        {
+        // DX didn't copy our TX2 response, stay in the same state by returning false
+        case TX1:
+            return false;
+        // Since we sent TX2, it doesn't make sense to respond to TX2
+        case TX2:
+            return false;
+        case TX3:
+            set_state(ctx, AS_ROGERS, TX4, max_tx_retries);
+            return true;
+        // QSO complete without signal report exchange
+        case TX4:
+        case TX5:
+            set_state(ctx, AS_SIGNOFF, TX5, 0);
+            return true;
+        default:
+            return false;
         }
 
     /* ------------------------------------------------ Roger‑Report sent */
     case AS_ROGER_REPORT:
-        switch (ctx->rcvd_msg_type) {
-            // Since we sent TX1, it doesn't make sense to respond to TX1
-            // case TX1:
-            //     set_state(ctx, AS_REPORT, TX2, MAX_TX_RETRY);
-            //     return true;
+        switch (ctx->rcvd_msg_type)
+        {
+        // Since we sent TX1, it doesn't make sense to respond to TX1
+        // case TX1:
+        //     set_state(ctx, AS_REPORT, TX2, MAX_TX_RETRY);
+        //     return true;
 
-            // DX didn't copy our TX3 response, stay in the same state by returning false
-            // case TX2:
-            //     set_state(ctx, AS_ROGER_REPORT, TX3, MAX_TX_RETRY);
-            //     return true;
+        // DX didn't copy our TX3 response, stay in the same state by returning false
+        // case TX2:
+        //     set_state(ctx, AS_ROGER_REPORT, TX3, MAX_TX_RETRY);
+        //     return true;
 
-            // Since we sent TX3, it doesn't make sense to respond to TX3
-            // case TX3:
-            //     set_state(ctx, AS_SIGNOFF, TX4, MAX_TX_RETRY);
-            //     return true;
+        // Since we sent TX3, it doesn't make sense to respond to TX3
+        // case TX3:
+        //     set_state(ctx, AS_SIGNOFF, TX4, MAX_TX_RETRY);
+        //     return true;
 
-            // QSO complete
-            case TX4:
-            case TX5: // Be polite, echo back 73
-                set_state(ctx, AS_SIGNOFF, TX5, 0);
-                return true;
-            default:
-                return false;
+        // QSO complete
+        case TX4:
+        case TX5: // Be polite, echo back 73
+            set_state(ctx, AS_SIGNOFF, TX5, 0);
+            return true;
+        default:
+            return false;
         }
-    
+
     case AS_ROGERS:
-        switch (ctx->rcvd_msg_type) {
-            // QSO complete
-            case TX4:
-            case TX5:
-                set_state(ctx, AS_IDLE, TX_UNDEF, 0);
-                break;
-            default:
-                break;
+        switch (ctx->rcvd_msg_type)
+        {
+        // QSO complete
+        case TX4:
+        case TX5:
+            set_state(ctx, AS_IDLE, TX_UNDEF, 0);
+            break;
+        default:
+            break;
         }
         return false;
 
     // Since 73 is sent only once, this should never be reached
     case AS_SIGNOFF:
-        switch (ctx->rcvd_msg_type) {
-            // DX hasn't received our TX5. Retry
-            case TX4:
-                break;
-            default:
-                set_state(ctx, AS_IDLE, TX_UNDEF, 0);
-                break;
+        switch (ctx->rcvd_msg_type)
+        {
+        // DX hasn't received our TX5. Retry
+        case TX4:
+            break;
+        default:
+            set_state(ctx, AS_IDLE, TX_UNDEF, 0);
+            break;
         }
         return false;
 
@@ -628,7 +677,8 @@ static int compare(const void *a, const void *b)
     const ctx_t *left = (const ctx_t *)a;
     const ctx_t *right = (const ctx_t *)b;
     // If both are in the same state, lower retry times wins
-    if (left->state == right->state) {
+    if (left->state == right->state)
+    {
         return CMP(right->retry_counter, left->retry_counter);
     }
     // Higher state wins
@@ -639,13 +689,14 @@ static void pop()
 {
     assert(queue_size > 0 && queue_size <= MAX_QUEUE_SIZE);
     // Shift up
-    for (int i = 0; i < queue_size - 1; i++) {
-        memcpy(&ctx_queue[i], &ctx_queue[i+1], sizeof(ctx_t));
+    for (int i = 0; i < queue_size - 1; i++)
+    {
+        memcpy(&ctx_queue[i], &ctx_queue[i + 1], sizeof(ctx_t));
     }
     --queue_size;
 }
 
-static ctx_t* append()
+static ctx_t *append()
 {
     assert(queue_size < MAX_QUEUE_SIZE);
     ctx_t *ctx = &ctx_queue[queue_size++];
@@ -667,31 +718,34 @@ static void sort_and_clean()
 static void write_worked_qso()
 {
     static const char band_strs[][4] = {
-        "40", "30", "20", "17", "15", "12", "10"
-    };
+        "40", "30", "20", "17", "15", "12", "10"};
     char *buf = add_worked_qso();
     // band, HH:MM, callsign, SNR
     // snprintf(buf, MAX_LINE_LEN, "%.4s %.3s %-7.7s%+02d %+02d",
     int printed = snprintf(buf, MAX_LINE_LEN, "%.4s %.3s %.12s",
-        log_rtc_time_string,
-        band_strs[BandIndex],
-        Target_Call
-    );
-    if (printed < 0) {
+                           log_rtc_time_string,
+                           band_strs[BandIndex],
+                           Target_Call);
+    if (printed < 0)
+    {
         return;
     }
     char rsl[5]; // space + sign + 2 digits + null = 5
     // Check if RX RSL would fit
     int needed = snprintf(rsl, sizeof(rsl), " %d", Station_RSL);
-    if (printed + needed <= MAX_LINE_LEN - 1) {
+    if (printed + needed <= MAX_LINE_LEN - 1)
+    {
         strncpy(buf + printed, rsl, needed + 1);
         printed += needed;
-    } else {
+    }
+    else
+    {
         return;
     }
     // Check if TX RSL would fit
     needed = snprintf(rsl, sizeof(rsl), " %d", Target_RSL);
-    if (printed + needed <= MAX_LINE_LEN - 1) {
+    if (printed + needed <= MAX_LINE_LEN - 1)
+    {
         strncpy(buf + printed, rsl, needed + 1);
     }
 }

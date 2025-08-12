@@ -17,6 +17,13 @@
 ## Links to Important Related Websites:
 ### - Barb's DX_FT8 Project: https://github.com/WB2CBA/DX-FT8-FT8-MULTIBAND-TABLET-TRANSCEIVER
 ### - Paul's GitHub Repository with earlier source code: https://github.com/g8kig/DX-FT8-MULTIBAND-TABLET-TRANSCEIVER-Source
-### - DXFT8 Users Group: https://dxft8.groups.io/g/main
+### - BluQRP: https://groups.io/g/BluQRP
+### - uSDX Users Group: https://groups.io/g/ucx
+###
+## Version 2.1.0
+### New in this version the device time can be synchonised to the Internet and reception reports uploaded to the PskReporter at https://www.pskreporter.info/
+### This requires an external ESP32 module
+### Please see https://github.com/g8kig/DX-FT8-TimeSync_PSKReporter for more information about constructing and programming the simple module that plugs into the transceiver.
+###
 ## What's Next?
 ## Since the Source Code is Open Source we invite you to join in with your improvements!!

@@ -10,7 +10,6 @@
 
 extern int Beacon_State;
 
-
 void setup_to_transmit_on_next_DSP_Flag(void);
 void terminate_QSO(void);
 

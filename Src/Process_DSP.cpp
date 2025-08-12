@@ -36,8 +36,6 @@ static q15_t dsp_output[FFT_SIZE * 2];
 static q15_t FFT_Scale[FFT_SIZE * 2];
 static q15_t FFT_Magnitude[FFT_SIZE];
 
-static int32_t FFT_Mag_10[FFT_SIZE / 2];
-
 static float mag_db[FFT_SIZE / 2 + 1];
 static float window[FFT_SIZE];
 
@@ -97,11 +95,11 @@ void process_FT8_FFT(void)
 
 		++FT_8_counter;
 
-		if (FT_8_counter == ft8_msg_samples) {
+		if (FT_8_counter == ft8_msg_samples)
+		{
 			decode_flag = 1;
 			ft8_flag = 0;
 		}
-
 	}
 }
 
@@ -120,8 +118,8 @@ void extract_power(int offset)
 
 		for (int j = 0; j < FFT_SIZE / 2; j++)
 		{
-			FFT_Mag_10[j] = 10 * (int32_t)FFT_Magnitude[j];
-			mag_db[j] = 5.0 * log((float)FFT_Mag_10[j] + 0.1);
+			int32_t FFT_Mag_10 = 10 * (int32_t)FFT_Magnitude[j];
+			mag_db[j] = 5.0f * log((float)FFT_Mag_10 + 0.1f);
 		}
 
 		// Loop over two possible frequency bin offsets (for averaging)

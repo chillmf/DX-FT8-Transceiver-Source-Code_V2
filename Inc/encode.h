@@ -4,6 +4,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // Generate FT8 tone sequence from payload data
 // [IN] payload - 9 byte array consisting of 72 bit payload
 // [OUT] itone  - array of NN (79) bytes to store the generated tones (encoded as 0..7)
@@ -25,5 +30,8 @@ void encode174(const uint8_t *message, uint8_t *codeword);
 // [IN] num_bits - number of bits in the sequence
 uint16_t crc(uint8_t *message, int num_bits);
 
-#endif // ENCODE_H_
+#ifdef __cplusplus
+}
+#endif
 
+#endif // ENCODE_H_

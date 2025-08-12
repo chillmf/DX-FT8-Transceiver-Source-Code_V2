@@ -8,7 +8,8 @@
 #ifndef ADIF_H_
 #define ADIF_H_
 
-typedef struct {
+typedef struct
+{
 	char text[24];
 	char data[24];
 	char log_item[24];

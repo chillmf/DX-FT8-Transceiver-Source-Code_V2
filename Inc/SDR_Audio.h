@@ -7,11 +7,10 @@
 
 #ifndef SDR_AUDIO_H_
 #define SDR_AUDIO_H_
+
 #include "arm_math.h"
 
 #define BUFFERSIZE 1280 * 4
-
-#define NoOp  __NOP()
 
 extern q15_t FIR_I_In[BUFFERSIZE / 4];
 extern q15_t FIR_Q_In[BUFFERSIZE / 4];

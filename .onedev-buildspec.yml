@@ -1,2 +1,28 @@
-version: 35
+version: 38
+jobs:
+- name: Build
+  jobExecutor: RemoteBuild
+  steps:
+  - !CheckoutStep
+    name: Checkout
+    cloneCredential: !DefaultCredential {}
+    withLfs: false
+    withSubmodules: false
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  - !CommandStep
+    name: Build
+    runInContainer: false
+    interpreter: !DefaultInterpreter
+      commands: |
+        pio pkg install --tool toolchain-gccarmnoneeabi@@~1.100301.0
+        make -j3
+    useTTY: true
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  triggers:
+  - !BranchUpdateTrigger {}
+  retryCondition: never
+  maxRetries: 3
+  retryDelay: 30
+  timeout: 3600
+
 

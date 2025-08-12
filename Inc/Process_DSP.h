@@ -11,15 +11,22 @@
 #include "SDR_Audio.h"
 #include "arm_math.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 #include "constants.h"
+#ifdef __cplusplus
+}
+#endif
 
-#define ft8_buffer_size 400 //arbitrary for 3 kc
+#define ft8_buffer_size 400 // arbitrary for 3 kHz
 #define ft8_min_bin 48
 
 #define ft8_min_freq FFT_Resolution * ft8_min_bin
 #define ft8_msg_samples 91
 
-#define FFT_SIZE  2048
+#define FFT_SIZE 2048
 #define input_gulp_size 1024
 
 extern double NCO_Frequency;

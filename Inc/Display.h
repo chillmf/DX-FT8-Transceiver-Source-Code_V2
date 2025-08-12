@@ -10,8 +10,8 @@
 
 #include <stdint.h>
 
-#define FFT_H  40
-#define FFT_Resolution 6.25  //8000/2/1280
+#define FFT_H 40
+#define FFT_Resolution 6.25 // 8000/2/1280
 #define MESSAGE_SIZE 40
 
 extern uint16_t cursor;
@@ -25,7 +25,7 @@ void show_short(uint16_t x, uint16_t y, uint8_t variable);
 void show_wide(uint16_t x, uint16_t y, int variable);
 
 void show_UTC_time(uint16_t x, uint16_t y, int utc_hours, int utc_minutes,
-		int utc_seconds, int color);
+				   int utc_seconds, int color);
 
 void show_Real_Date(uint16_t x, uint16_t y, int date, int month, int year);
 

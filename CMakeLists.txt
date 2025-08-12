@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 include(arm-gcc.cmake)
 
-project(Katy LANGUAGES C ASM)
+project(Katy LANGUAGES C CPP ASM)
 
 # -----------------------------------------------------------------------------
 # Toolchain (normally supplied via -DCMAKE_TOOLCHAIN_FILE)
@@ -68,6 +68,7 @@ file(GLOB DSP_ASM_SOURCES DSP_CMSIS/*.s)
 file(GLOB FT8_SOURCES FT8_library/*.c)
 file(GLOB_RECURSE MIDDLEWARES_SOURCES Middlewares/src/*.c)
 file(GLOB SRC_SOURCES Src/*.c)
+file(GLOB SRCPP_SOURCES Src/*.cpp)
 file(GLOB SYSTEM_SOURCES Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/*.c)
 set(STARTUP_FILE Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/gcc/startup_stm32f746xx.s)
 
@@ -82,19 +83,21 @@ add_executable(Katy.elf
   ${FT8_SOURCES}
   ${MIDDLEWARES_SOURCES}
   ${SRC_SOURCES}
+  ${SRCPP_SOURCES}
 )
 
 # --- Compile Src/*.c with -O0 to make debugging easier
 set_source_files_properties(
-    Src/main.c
+    Src/main.cpp
     # ${SRC_SOURCES}
+    # ${SRCPP_SOURCES}
     PROPERTIES
         COMPILE_OPTIONS "-O0"    # or COMPILE_FLAGS "-O0" on <3.3
 )
 
 # --- Treat warnings as errors for SRC_SOURCES
 set_source_files_properties(
-    ${SRC_SOURCES}
+    ${SRC_SOURCES} ${SRCPP_SOURCES}
     PROPERTIES
         COMPILE_OPTIONS "-Werror"
 )

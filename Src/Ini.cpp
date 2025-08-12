@@ -4,12 +4,6 @@
 
 #include "ini.h"
 
-#ifndef bool
-typedef unsigned char bool;
-#define true 1
-#define false 0
-#endif
-
 #define min(a, b) ((a) < (b)) ? (a) : (b)
 
 // Basic function to check if a character is whitespace (space or tab)
@@ -130,7 +124,7 @@ const char *get_ini_value(const ini_data_t *ini_data, const char *section_name, 
         const ini_section_t *section = ini_data->sections + i;
         if (section->present && strcmp(section->name, section_name) == 0)
         {
-			return get_ini_value_from_section(section, entry_key);
+            return get_ini_value_from_section(section, entry_key);
         }
     }
     return NULL;

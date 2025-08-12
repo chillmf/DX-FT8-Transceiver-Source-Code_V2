@@ -22,6 +22,7 @@ typedef struct
 typedef enum
 {
 	OPTION_Band_Index,
+	OPTION_Logging_State,
 	OPTION_Skip_Tx1,
 	NUM_OPTIONS
 } OptionNumber;

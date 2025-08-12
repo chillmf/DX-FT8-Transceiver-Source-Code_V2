@@ -14,10 +14,6 @@
 #include "stm32746g_discovery.h"
 #include "stm32f7xx_hal.h"
 #endif
-void _debug(const char *txt);
-void tx_display_update();
-
-#define NoOp  __NOP()
 
 #define MAX_QUEUE_SIZE 9
 
@@ -34,7 +30,9 @@ extern bool clr_pressed;
 extern bool tx_pressed;
 extern bool free_text;
 
-extern const char* test_data_file;
+extern const char *test_data_file;
+
+void logger(const char *message, const char* file, int line);
 
 #endif /* __MAIN_H */
 
