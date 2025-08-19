@@ -54,6 +54,7 @@
 #include "Display.h"
 #include "qso_display.h"
 #include "traffic_manager.h"
+#include "PskInterface.h"
 
 uint32_t start_time, ft8_time;
 
@@ -138,25 +139,31 @@ static void update_synchronization(void)
 		was_txing = 1;
 		// Partial TX, set the TX counter based on current ft8_time
 		ft8_xmit_counter = (ft8_time % 15000) / 160; // 160ms per symbol
+
+
 		// Log the TX
 		char log_str[128];
 		make_Real_Time();
 		make_Real_Date();
 		// Log the ctx queue
+
 		autoseq_log_ctx_queue(autoseq_queue_strs);
+
 		for (int i = 0; i < MAX_QUEUE_SIZE; i++) {
 			const char *cur_line = autoseq_queue_strs[i];
 			if (cur_line[0] == '\0') {
 				break;
 			}
-			Write_RxTxLog_Data(cur_line);
+		//	Write_RxTxLog_Data(cur_line);
 		}
+
 		snprintf(log_str, sizeof(log_str), "T [%s %s][%s] %s",
 				 log_rtc_date_string,
 				 log_rtc_time_string,
 				 sBand_Data[BandIndex].display,
 				 autoseq_txbuf);
-		Write_RxTxLog_Data(log_str);
+		//Write_RxTxLog_Data(log_str);
+
 		tx_display_update();
 	}
 }
@@ -221,7 +228,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 	autoseq_init();
-
+	updateTime();
 
 	while (1)
 	{
@@ -287,9 +294,13 @@ int main(int argc, char *argv[]) {
 			{
 				display_messages(new_decoded, master_decoded);
 			}
+
+
 			// Write all the decoded messages to RxTxLog
 			make_Real_Time();
 			make_Real_Date();
+
+
 			for (int i = 0; i < master_decoded; ++i) {
 				char log_str[64];
 				snprintf(log_str, sizeof(log_str), "%c [%s %s][%s] %s %s %s %2i %d",
@@ -302,8 +313,12 @@ int main(int argc, char *argv[]) {
 						 new_decoded[i].locator,
 						 new_decoded[i].snr,
 						 new_decoded[i].freq_hz);
-				Write_RxTxLog_Data(log_str);
+				//Write_RxTxLog_Data(log_str);
 			}
+
+
+
+
 			if (!was_txing) {
 				autoseq_on_decodes(new_decoded, master_decoded);
 				if (autoseq_get_next_tx(autoseq_txbuf))

@@ -87,7 +87,7 @@ void setup_display(void)
 
 	BSP_LCD_DisplayStringAt(0, 60, (const uint8_t *)"DX FT8: A FT8 Xceiver", LEFT_MODE);
 	BSP_LCD_DisplayStringAt(33, 80, (const uint8_t *)"Hardware: V2.0", LEFT_MODE);
-	BSP_LCD_DisplayStringAt(33, 100, (const uint8_t *)"Firmware: V2.0.0", LEFT_MODE);
+	BSP_LCD_DisplayStringAt(33, 100, (const uint8_t *)"Firmware: V2.0.1", LEFT_MODE);
 	BSP_LCD_DisplayStringAt(33, 120, (const uint8_t *)"W5BAA - WB2CBA", LEFT_MODE);
 
 	BSP_LCD_DisplayStringAt(33, 160,

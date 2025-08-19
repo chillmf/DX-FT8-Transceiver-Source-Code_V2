@@ -21,6 +21,9 @@
 #include "DS3231.h"
 #include "SiLabs.h"
 #include "options.h"
+#include "PskInterface.h"
+
+
 
 int Tune_On; // 0 = Receive, 1 = Xmit Tune Signal
 int Beacon_On;
@@ -755,6 +758,7 @@ void executeButton(uint16_t index)
 		else
 		{
 			Tune_On = 1; // Turns off display of FT8 traffic
+			updateTime();
 			setup_Cal_Display();
 			//Arm_Tune = 0;
 		}
@@ -1170,6 +1174,8 @@ void setup_Cal_Display(void)
 	}
 
 	show_wide(340, 55, start_freq);
+
+	requestTimeSync();
 
 	load_RealTime();
 	display_RTC_TimeEdit(RTC_Button - 20, RTC_line0 + 15);

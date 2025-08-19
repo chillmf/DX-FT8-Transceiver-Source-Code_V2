@@ -26,6 +26,7 @@
 #include "decode_ft8.h"
 #include "ADIF.h"
 #include "DS3231.h"
+#include "PskInterface.h"
 
 /* For DECENDING order. Returns −1 if (a) > (b), 0 if equal, +1 if (a) < (b) */
 #define CMP(a, b)   ( ((a) < (b)) - ((a) > (b)) )
@@ -151,7 +152,15 @@ int ft8_decode(void)
 					}
 				}
 
+				// Ignore hashed callsigns
+				if (*call_from != '<')
+				{
+					uint32_t frequency = (sBand_Data[BandIndex].Frequency * 1000) + new_decoded[num_decoded].freq_hz;
+					addReceivedRecord(call_from, frequency, display_RSL);
+				}
 				++num_decoded;
+
+
 			}
 		}
 	} // End of big decode loop

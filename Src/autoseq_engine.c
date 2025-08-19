@@ -31,7 +31,7 @@ extern int Beacon_On; // TODO get rid of manual extern
 extern int Skip_Tx1;  // TODO get rid of manual extern
 
 /***** Compile‑time knobs *****/
-#define MAX_TX_RETRY 5
+#define MAX_TX_RETRY 3
 
 /* For DECENDING order. Returns −1 if (a) > (b), 0 if equal, +1 if (a) < (b) */
 #define CMP(a, b)   ( ((a) < (b)) - ((a) > (b)) )
