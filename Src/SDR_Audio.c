@@ -114,10 +114,14 @@ void I2S2_RX_ProcessBuffer(uint16_t offset)
 	for (int i = 0; i < BUFFERSIZE / 4; i++)
 	{
 		NCO_phz += NCOphzinc;
-		float temp = (q15_t)Sine_table[(NCO_phz >> 4) & 0xFFF] * RMSConstant;
+		float temp1 = (q15_t)Sine_table[(NCO_phz >> 4) & 0xFFF] * RMSConstant;
+		float temp2 = (q15_t)Sine_table[((NCO_phz >> 4) + 0x400) & 0xFFF] * RMSConstant;
+
+
 		int index = i * 2 + offset;
-		FIR_I_In[i] = (q15_t)(temp * in_buff[index]);
-		FIR_Q_In[i] = (q15_t)(temp * in_buff[index + 1]);
+		FIR_I_In[i] = (q15_t)(temp1 * in_buff[index]);
+		//FIR_Q_In[i] = (q15_t)(temp1 * in_buff[index + 1]);
+		FIR_Q_In[i] = (q15_t)(temp2 * in_buff[index]);
 	}
 
 	Process_FIR_I_32K();
